@@ -30,9 +30,11 @@ Each of the 10 playable classes has its own tab with up to **54 roster slots** a
 * **Add to Raid** (+) and **Invite to Group** (>) buttons per row
 
 ## Screenshots
-
+Class Tabs
 ![Class Tab](Class%20Tab.png)
+Raid Window
 ![Raid Window](Raid%20Window.png)
+Character Sheet
 ![Character Sheet](Character%20Shet.png)
 
 #### 
