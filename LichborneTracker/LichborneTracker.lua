@@ -4190,6 +4190,18 @@ local function CalcGS()
                 break
             end
         end
+        -- Sync GS to any raid rosters that contain this character
+        local updatedName = rowData.name
+        if updatedName and updatedName ~= "" and LichborneTrackerDB.raidRosters then
+            for _, roster in pairs(LichborneTrackerDB.raidRosters) do
+                for _, slot in ipairs(roster) do
+                    if slot.name and slot.name:lower() == updatedName:lower() then
+                        slot.gs = gs
+                    end
+                end
+            end
+            if raidRowFrames and #raidRowFrames > 0 then RefreshRaidRows() end
+        end
         -- Update Add Target status label
         if LichborneAddStatus then
             local name = rowData.name or "?"
