@@ -452,6 +452,25 @@ local function UpdateTabs()
     end
 end
 
+-- ── Row hover highlight helper ─────────────────────────────────
+-- Hooks OnEnter/OnLeave on a child frame to show/hide the parent row highlight
+local function HookRowHighlight(child, row, hovTex)
+    local orig_enter = child:GetScript("OnEnter")
+    local orig_leave = child:GetScript("OnLeave")
+    child:SetScript("OnEnter", function()
+        hovTex:SetTexture(0.78, 0.61, 0.23, 0.12)
+        if orig_enter then orig_enter() end
+    end)
+    child:SetScript("OnLeave", function()
+        -- Only hide if mouse isn't still on the row
+        local f = GetMouseFocus()
+        if f ~= row then
+            hovTex:SetTexture(0, 0, 0, 0)
+        end
+        if orig_leave then orig_leave() end
+    end)
+end
+
 -- ── Build row frames (once) ───────────────────────────────────
 local function BuildRows(parent, yStart)
     if #rowFrames > 0 then return end  -- already built
@@ -481,7 +500,7 @@ local function BuildRows(parent, yStart)
         row:EnableMouse(true)
         row:SetScript("OnEnter", function()
             if not dragSourceRow then
-                row.hov:SetTexture(0.3, 0.5, 0.9, 0.06)
+                row.hov:SetTexture(0.78, 0.61, 0.23, 0.12)
             end
         end)
         row:SetScript("OnLeave", function()
@@ -496,17 +515,18 @@ local function BuildRows(parent, yStart)
         local dragTex = dragBtn:CreateTexture(nil, "ARTWORK")
         dragTex:SetAllPoints(dragBtn)
         dragTex:SetTexture("Interface\\ChatFrame\\ChatFrameBackground")
-        dragTex:SetVertexColor(0.3, 0.4, 0.6, 0.8)
+        dragTex:SetVertexColor(0.3, 0.4, 0.6, 0)  -- invisible by default
         row.dragTex = dragTex
         local dragLbl = dragBtn:CreateFontString(nil, "OVERLAY")
         dragLbl:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
         dragLbl:SetAllPoints(dragBtn)
         dragLbl:SetJustifyH("CENTER"); dragLbl:SetJustifyV("MIDDLE")
-        dragLbl:SetTextColor(0.8, 0.9, 1.0, 1.0)
-        dragLbl:SetText(":")
+        dragLbl:SetTextColor(0.4, 0.4, 0.5, 1.0)
+        dragLbl:SetText(tostring(i))
+        row.dragLbl = dragLbl
         dragBtn:SetScript("OnEnter", function()
             if not dragSourceRow then
-                dragTex:SetVertexColor(0.9, 0.7, 0.1, 1.0)
+                row.dragLbl:SetTextColor(0.78, 0.61, 0.23, 1.0)
                 GameTooltip:SetOwner(dragBtn, "ANCHOR_RIGHT")
                 GameTooltip:AddLine("Drag to reorder", 1, 1, 1)
                 GameTooltip:Show()
@@ -514,7 +534,7 @@ local function BuildRows(parent, yStart)
         end)
         dragBtn:SetScript("OnLeave", function()
             if not dragSourceRow then
-                dragTex:SetVertexColor(0.3, 0.4, 0.6, 0.8)
+                row.dragLbl:SetTextColor(0.4, 0.4, 0.5, 1.0)
             end
             GameTooltip:Hide()
         end)
@@ -523,7 +543,7 @@ local function BuildRows(parent, yStart)
                 local data = LichborneTrackerDB.rows[row.dbIndex]
                 if data and data.name and data.name ~= "" then
                     dragSourceRow = row
-                    dragTex:SetVertexColor(0.9, 0.7, 0.1, 1.0)
+                    row.dragLbl:SetTextColor(0.78, 0.61, 0.23, 1.0)
                     row.hov:SetTexture(0.9, 0.7, 0.1, 0.12)
                 end
             end
@@ -629,6 +649,10 @@ local function BuildRows(parent, yStart)
         nb:SetScript("OnTabPressed", function() this:ClearFocus() end)
         nb:SetScript("OnEscapePressed", function() this:ClearFocus() end)
         row.nameBox = nb
+        nb:SetScript("OnEnter", function() row.hov:SetTexture(0.78, 0.61, 0.23, 0.12) end)
+        nb:SetScript("OnLeave", function()
+            if GetMouseFocus() ~= row then row.hov:SetTexture(0, 0, 0, 0) end
+        end)
 
         -- GS box
         local gsb = CreateFrame("EditBox", "LichborneRow"..i.."GS", row)
@@ -644,6 +668,10 @@ local function BuildRows(parent, yStart)
         gsb:SetScript("OnTabPressed", function() this:ClearFocus() end)
         gsb:SetScript("OnEscapePressed", function() this:ClearFocus() end)
         row.gsBox = gsb
+        gsb:SetScript("OnEnter", function() row.hov:SetTexture(0.78, 0.61, 0.23, 0.12) end)
+        gsb:SetScript("OnLeave", function()
+            if GetMouseFocus() ~= row then row.hov:SetTexture(0, 0, 0, 0) end
+        end)
 
         -- Gear boxes
         row.gearBoxes = {}
@@ -671,6 +699,12 @@ local function BuildRows(parent, yStart)
                 end
             end)
             row.gearBoxes[g] = gb
+            -- Hook gear box to show row highlight
+            gb:SetScript("OnEnter", function() row.hov:SetTexture(0.78, 0.61, 0.23, 0.12) end)
+            gb:SetScript("OnLeave", function()
+                local f = GetMouseFocus()
+                if f ~= row then row.hov:SetTexture(0, 0, 0, 0) end
+            end)
         end
 
         -- Tier average box (read-only label)
@@ -741,6 +775,14 @@ local function BuildRows(parent, yStart)
         db:SetScript("OnLeave", function() GameTooltip:Hide() end)
         row.delBtn = db
 
+        -- Hook all child elements to propagate row highlight
+        local hov = row.hov
+        HookRowHighlight(dragBtn, row, hov)
+        HookRowHighlight(specBtn, row, hov)
+        HookRowHighlight(arb, row, hov)
+        HookRowHighlight(agb, row, hov)
+        HookRowHighlight(db, row, hov)
+
         -- Divider
         local line = row:CreateTexture(nil, "OVERLAY")
         line:SetHeight(1); line:SetWidth(1010)
@@ -769,7 +811,7 @@ local function RefreshRows()
     if not classPage[activeTab] then classPage[activeTab] = 1 end
     -- Update page dropdown label
     local page = classPage[activeTab] or 1
-    if LichbornePageLbl then LichbornePageLbl:SetText("|cffaaccffPage "..page.."  v|r") end
+    if LichbornePageLbl then LichbornePageLbl:SetText("|cffd4af37Page "..page.."  v|r") end
     if LichbornePagePrev then LichbornePagePrev:SetAlpha(page > 1 and 1.0 or 0.35) end
     if LichbornePageNext then LichbornePageNext:SetAlpha(page < MAX_PAGES and 1.0 or 0.35) end
 
@@ -782,6 +824,10 @@ local function RefreshRows()
         if di then
             local data = LichborneTrackerDB.rows[di]
             row.dbIndex = di
+            if row.dragLbl then
+                row.dragLbl:SetText(tostring(i))
+                row.dragLbl:SetTextColor(0.4, 0.4, 0.5, 1.0)
+            end
             row:Show()
 
             -- No background tint - clean dark rows
@@ -1309,7 +1355,7 @@ local r5, _ = GetCurrentRoster(); r5[idx] = {name="", cls="", spec="", gs=0}
             if c then
                 local hex = string.format("|cff%02x%02x%02x", math.floor(c.r*255), math.floor(c.g*255), math.floor(c.b*255))
                 local n = raidCounts[cls] or 0
-                lbl:SetText(hex..(TAB_LABELS[cls])..": "..n.."|r")
+                lbl:SetText(hex..(TAB_LABELS[cls])..": |cffd4af37"..n.."|r")
                 -- Color background if has members
                 local sw = lbl:GetParent()
                 if sw and sw.bg then
@@ -1400,7 +1446,7 @@ local function BuildRaidFrame(parent, fl)
     local raidDD = MakeDD("LichborneRaidRaidDrop", 220)
     local raidDDMenu  -- forward ref
 
-    local function UpdateRaidDD()
+    local function UpdateRaidDD(hex)
         local t = LichborneTrackerDB.raidTier or 1
         local defs = RAID_DEFS[t] or {}
         -- Find current raid in this tier, fallback to first
@@ -1414,7 +1460,8 @@ local function BuildRaidFrame(parent, fl)
         end
         local raidName = LichborneTrackerDB.raidName or "---"
         local raidSize = LichborneTrackerDB.raidSize or 40
-        raidDD.lbl:SetText("|cffffffff"..raidName.."|r  |cffaaaaaa("..raidSize..")|r  v")
+        local h = hex or "|cffd4af37"
+        raidDD.lbl:SetText(h..raidName.."|r  |cffaaaaaa("..raidSize..")|r  v")
     end
 
     local function UpdateTierDD()
@@ -1423,7 +1470,7 @@ local function BuildRaidFrame(parent, fl)
         local hex = c and string.format("|cff%02x%02x%02x",math.floor(c.r*255),math.floor(c.g*255),math.floor(c.b*255)) or "|cffffffff"
         tierDD.lbl:SetText(hex.."T"..t.."  "..(TIER_LABELS[t] or ""):match("^T%d+ %— (.+)") or "".."|r  v")
         UpdateTierBar()
-        UpdateRaidDD()
+        UpdateRaidDD(hex)
     end
     UpdateTierDD()
 
@@ -1504,7 +1551,7 @@ local function BuildRaidFrame(parent, fl)
                 LichborneTrackerDB.raidGroup = "A"  -- always start on group A for a new raid
                 -- Update group dropdown label to show A
                 local gdd = _G["LichborneRaidGroupDrop"]
-                if gdd and gdd.lbl then gdd.lbl:SetText("|cffffffff A|r  v") end
+                if gdd and gdd.lbl then gdd.lbl:SetText("|cffd4af37 A|r  v") end
                 UpdateRaidDD()
                 raidDDMenu:Hide()
                 if raidRowFrames and #raidRowFrames > 0 then RefreshRaidRows() end
@@ -1534,7 +1581,7 @@ local function BuildRaidFrame(parent, fl)
 
     local function UpdateGroupDD()
         local g = LichborneTrackerDB.raidGroup or "A"
-        groupDD.lbl:SetText("|cffffffff"..g.."|r  v")
+        groupDD.lbl:SetText("|cffd4af37"..g.."|r  v")
     end
     UpdateGroupDD()
 
@@ -1726,7 +1773,7 @@ local function BuildRaidFrame(parent, fl)
     clearBtn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight","ADD")
     local clearLbl = clearBtn:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
     clearLbl:SetAllPoints(clearBtn); clearLbl:SetJustifyH("CENTER"); clearLbl:SetJustifyV("MIDDLE")
-    clearLbl:SetText("|cffff6666Clear|r")
+    clearLbl:SetText("|cffd4af37Clear|r")
     clearBtn:SetScript("OnEnter",function()
         GameTooltip:SetOwner(clearBtn,"ANCHOR_BOTTOM")
         GameTooltip:AddLine("Clear All Raid Slots",1,1,1)
@@ -1785,7 +1832,7 @@ local function BuildRaidFrame(parent, fl)
     local function RH(lbl,x,w)
         local fs=hdrRow:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
         fs:SetPoint("LEFT",hdrRow,"LEFT",x,0); fs:SetWidth(w); fs:SetJustifyH("CENTER")
-        fs:SetText("|cff90b8e8"..lbl.."|r")
+        fs:SetText("|cffd4af37"..lbl.."|r")
     end
 
     -- Layout constants for raid rows
@@ -1823,6 +1870,16 @@ local function BuildRaidFrame(parent, fl)
         rf:EnableMouse(true)
         local raidHov = rf:CreateTexture(nil,"OVERLAY"); raidHov:SetAllPoints(rf); raidHov:SetTexture(0,0,0,0); rf.raidHov = raidHov
         local raidDropHi = rf:CreateTexture(nil,"OVERLAY"); raidDropHi:SetAllPoints(rf); raidDropHi:SetTexture(0,0,0,0); rf.raidDropHi = raidDropHi
+        rf:SetScript("OnEnter", function()
+            if not raidDragSource then
+                raidHov:SetTexture(0.78, 0.61, 0.23, 0.12)
+            end
+        end)
+        rf:SetScript("OnLeave", function()
+            if not raidDragSource then
+                raidHov:SetTexture(0, 0, 0, 0)
+            end
+        end)
 
         -- Drag handle button (same style as class tab, shows row number)
         local dragBtn = CreateFrame("Button",nil,rf)
@@ -1902,6 +1959,8 @@ local function BuildRaidFrame(parent, fl)
         gsb:SetScript("OnTabPressed",function() gsb:ClearFocus() end)
         gsb:SetScript("OnEscapePressed",function() gsb:ClearFocus() end)
         rf.gsBox=gsb
+        gsb:SetScript("OnEnter", function() rf.raidHov:SetTexture(0.78, 0.61, 0.23, 0.12) end)
+        gsb:SetScript("OnLeave", function() if GetMouseFocus()~=rf then rf.raidHov:SetTexture(0,0,0,0) end end)
 
         -- Tier box (styled like GS box)
         local tierBox2 = CreateFrame("Frame",nil,rf)
@@ -1927,6 +1986,7 @@ local function BuildRaidFrame(parent, fl)
         local roleLbl=roleBtn:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
         roleLbl:SetAllPoints(roleBtn); roleLbl:SetJustifyH("CENTER"); roleLbl:SetJustifyV("MIDDLE")
         roleLbl:SetText(""); rf.roleBtn=roleBtn; rf.roleLbl=roleLbl; rf.roleIcon=roleIcon
+        HookRowHighlight(roleBtn, rf, rf.raidHov)
 
         -- Notes editbox
         local notesBox=CreateFrame("EditBox",nil,rf)
@@ -1939,6 +1999,8 @@ local function BuildRaidFrame(parent, fl)
         notesBox:SetScript("OnTabPressed",function() notesBox:ClearFocus() end)
         notesBox:SetScript("OnEscapePressed",function() notesBox:ClearFocus() end)
         rf.notesBox=notesBox
+        notesBox:SetScript("OnEnter", function() rf.raidHov:SetTexture(0.78, 0.61, 0.23, 0.12) end)
+        notesBox:SetScript("OnLeave", function() if GetMouseFocus()~=rf then rf.raidHov:SetTexture(0,0,0,0) end end)
 
         -- Class btn reference for color updates
         rf.classBtn=clsBtn; rf.classBtnTex=clsTex
@@ -1957,6 +2019,13 @@ local function BuildRaidFrame(parent, fl)
         end)
         db:SetScript("OnLeave", function() GameTooltip:Hide() end)
         rf.delBtn=db
+
+        -- Hook child elements to propagate row highlight
+        local rHov = rf.raidHov
+        HookRowHighlight(dragBtn, rf, rHov)
+        HookRowHighlight(db, rf, rHov)
+        if rf.specBtn then HookRowHighlight(rf.specBtn, rf, rHov) end
+        if rf.roleBtn then HookRowHighlight(rf.roleBtn, rf, rHov) end
 
         -- Divider
         local ln=rf:CreateTexture(nil,"OVERLAY"); ln:SetHeight(1); ln:SetWidth(500)
@@ -1997,12 +2066,18 @@ local function BuildRaidFrame(parent, fl)
             if targetIdx then
                 local roster3, _ = GetCurrentRoster()
                 local a, b2 = raidDragSource, targetIdx
-                local ra = roster3[a] or {name="",cls="",spec="",gs=0,role="",notes=""}
-                local rb = roster3[b2] or {name="",cls="",spec="",gs=0,role="",notes=""}
-                local tmp = {name=ra.name,cls=ra.cls,spec=ra.spec,gs=ra.gs,role=ra.role,notes=ra.notes}
-                roster3[a] = {name=rb.name,cls=rb.cls,spec=rb.spec,gs=rb.gs,role=rb.role,notes=rb.notes}
-                roster3[b2] = tmp
-                RefreshRaidRows()
+                if a ~= b2 then
+                    local item = {name=roster3[a].name,cls=roster3[a].cls,spec=roster3[a].spec,gs=roster3[a].gs,role=roster3[a].role,notes=roster3[a].notes}
+                    -- Shift rows between a and b2
+                    if a < b2 then
+                        for k = a, b2 - 1 do roster3[k] = roster3[k+1] end
+                    else
+                        for k = a, b2 + 1, -1 do roster3[k] = roster3[k-1] end
+                    end
+                    roster3[b2] = item
+                    raidSortMode = nil  -- clear sort so drag order sticks
+                    RefreshRaidRows()
+                end
             end
             for _, rf2 in ipairs(raidRowFrames) do
                 if rf2.raidHov then rf2.raidHov:SetTexture(0,0,0,0) end
@@ -2038,49 +2113,44 @@ local function BuildRaidFrame(parent, fl)
     RH2 = function(lbl,x,w)
         local fs=hdrRow2:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
         fs:SetPoint("LEFT",hdrRow2,"LEFT",x,0); fs:SetWidth(w); fs:SetJustifyH("CENTER")
-        fs:SetText("|cff90b8e8"..lbl.."|r")
+        fs:SetText("|cffd4af37"..lbl.."|r")
     end
     local specHdrTex2 = hdrRow2:CreateTexture(nil, "OVERLAY")
     specHdrTex2:SetPoint("LEFT", hdrRow2, "LEFT", RS, 0)
     specHdrTex2:SetSize(18, 16)
     specHdrTex2:SetTexture("Interface\\Icons\\Ability_Rogue_Deadliness")
-    RH2("Name",RN+2,122); RH2("GS",RG+2,52); RH2("Tier",RT+2,36); RH2("",RRole,20); RH2("Notes",RNotes+2,168)
+    RH2("Name",RN+2,122); RH2("GS",RG+2,52); RH2("Tier",RT+2,36); RH2("Role",RRole,20); RH2("Notes",RNotes+2,168)
 
-    -- ── Raid class count bar ──────────────────────────────────
+        -- ── Raid class count bar ──────────────────────────────────
     local raidCountBar = CreateFrame("Frame","LichborneRaidCountBar",LichborneRaidFrame)
     _G["LichborneRaidCountBar"] = raidCountBar
-    raidCountBar:SetPoint("TOPLEFT", LichborneRaidFrame, "TOPLEFT", 0, -486)
-    raidCountBar:SetSize(1020, 24)
+    raidCountBar:SetPoint("TOPLEFT", LichborneRaidFrame, "TOPLEFT", 0, -488)
+    raidCountBar:SetSize(1014, 24)
     raidCountBar:SetFrameLevel(fl + 11)
     local rcbBg = raidCountBar:CreateTexture(nil,"BACKGROUND")
     rcbBg:SetAllPoints(raidCountBar); rcbBg:SetTexture(0.05, 0.07, 0.13, 1)
-    -- Gold top border on count bar
-    local rcbBorder = raidCountBar:CreateTexture(nil,"OVERLAY")
-    rcbBorder:SetHeight(1); rcbBorder:SetAllPoints(false)
-    rcbBorder:SetPoint("TOPLEFT",raidCountBar,"TOPLEFT",0,0)
-    rcbBorder:SetPoint("TOPRIGHT",raidCountBar,"TOPRIGHT",0,0)
-    rcbBorder:SetHeight(1); rcbBorder:SetTexture(0.08,0.20,0.42,1)
     local rcTitle = raidCountBar:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
     rcTitle:SetPoint("LEFT", raidCountBar, "LEFT", 4, 0)
     rcTitle:SetText("|cffC69B3ACount:|r"); rcTitle:SetWidth(44)
     LichborneRaidCountLabels = {}
-    local rcW = (1020 - 50) / 10
+    local rcW = (1014 - 50) / 10
+    local rcIdx = 0
     for ci, cls in ipairs(CLASS_TABS) do
-        if cls == "Raid" then break end
+        if cls == "Raid" or cls == "All" then break end
+        rcIdx = rcIdx + 1
         local c = CLASS_COLORS[cls]
         local rcSw = CreateFrame("Button", nil, raidCountBar)
         rcSw:SetSize(rcW - 2, 20)
-        rcSw:SetPoint("LEFT", raidCountBar, "LEFT", 48 + (ci-1)*rcW, 0)
+        rcSw:SetPoint("LEFT", raidCountBar, "LEFT", 48 + (rcIdx-1)*rcW, 0)
         rcSw:SetFrameLevel(raidCountBar:GetFrameLevel() + 1)
         local rcBg2 = rcSw:CreateTexture(nil,"BACKGROUND"); rcBg2:SetAllPoints(rcSw)
         rcBg2:SetTexture(0.08, 0.10, 0.18, 1); rcSw.bg = rcBg2
         local hex = string.format("|cff%02x%02x%02x", math.floor(c.r*255), math.floor(c.g*255), math.floor(c.b*255))
         local rcLbl = rcSw:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
         rcLbl:SetAllPoints(rcSw); rcLbl:SetJustifyH("CENTER"); rcLbl:SetJustifyV("MIDDLE")
-        rcLbl:SetText(hex..(TAB_LABELS[cls])..": 0|r")
+        rcLbl:SetText(hex..(TAB_LABELS[cls])..": "..hex.."0|r")
         rcSw.lbl = rcLbl; rcSw.cls = cls
         LichborneRaidCountLabels[cls] = rcLbl
-        -- Click to filter/highlight that class (future feature hook)
         rcSw:SetScript("OnEnter", function()
             GameTooltip:SetOwner(rcSw,"ANCHOR_TOP")
             GameTooltip:AddLine(cls, c.r, c.g, c.b)
@@ -2397,7 +2467,7 @@ RefreshAllRows = function()
     local g = LichborneTrackerDB.allGroup or "A"
     if LichborneAllPageLbl then
         local pageNum = ({A="1",B="2",C="3"})[g] or g
-        LichborneAllPageLbl:SetText("|cffaaccffPage "..pageNum.."  v|r")
+        LichborneAllPageLbl:SetText("|cffd4af37Page "..pageNum.."  v|r")
     end
 
     -- Overflow sync: rebuild all three groups from class tabs sequentially
@@ -2618,7 +2688,7 @@ RefreshAllRows = function()
             if c then
                 local n = allCounts[cls] or 0
                 local hex = string.format("|cff%02x%02x%02x",math.floor(c.r*255),math.floor(c.g*255),math.floor(c.b*255))
-                lbl:SetText(hex..(TAB_LABELS[cls])..": "..n.."|r")
+                lbl:SetText(hex..(TAB_LABELS[cls])..": "..hex..n.."|r")
                 local sw = lbl:GetParent()
                 if sw and sw.bg then
                     if n > 0 then sw.bg:SetTexture(c.r*0.25,c.g*0.25,c.b*0.30,1)
@@ -2652,7 +2722,7 @@ local function BuildAllFrame(parent, fl)
     local allTitle = allHdr:CreateFontString(nil,"OVERLAY","GameFontNormal")
     allTitle:SetPoint("TOPLEFT",allHdr,"TOPLEFT",0,0); allTitle:SetPoint("TOPRIGHT",allHdr,"TOPRIGHT",0,0)
     allTitle:SetHeight(24); allTitle:SetJustifyH("CENTER"); allTitle:SetJustifyV("MIDDLE")
-    allTitle:SetText("|cff44cc44All|r")
+    allTitle:SetText("|cffd4af37Character Sheet|r")
 
     -- Sort / Clear buttons
     local function MakeHdrBtn(lbl, br, bg2, bb, xOff, w)
@@ -2677,12 +2747,12 @@ local function BuildAllFrame(parent, fl)
     allPageBtn:SetPoint("RIGHT", allHdr, "RIGHT", -4, 0)
     allPageBtn:SetFrameLevel(fl+12)
     allPageBtn:SetBackdrop({bgFile="Interface\\ChatFrame\\ChatFrameBackground",edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=16,edgeSize=8,insets={left=2,right=2,top=2,bottom=2}})
-    allPageBtn:SetBackdropColor(0.3*0.4, 0.4*0.4, 0.6*0.4, 1)
-    allPageBtn:SetBackdropBorderColor(0.3, 0.4, 0.6, 0.9)
+    allPageBtn:SetBackdropColor(0.10, 0.08, 0.02, 1)
+    allPageBtn:SetBackdropBorderColor(0.78, 0.61, 0.23, 0.9)
     allPageBtn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
     local allPageLbl = allPageBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     allPageLbl:SetAllPoints(allPageBtn); allPageLbl:SetJustifyH("CENTER"); allPageLbl:SetJustifyV("MIDDLE")
-    allPageLbl:SetText("|cffaaccffPage 1  v|r")
+    allPageLbl:SetText("|cffd4af37Page 1  v|r")
     LichborneAllPageLbl  = allPageLbl
     LichborneAllPagePrev = nil
     LichborneAllPageNext = nil
@@ -2694,7 +2764,7 @@ local function BuildAllFrame(parent, fl)
         local g = LichborneTrackerDB.allGroup or "A"
         if LichborneAllPageLbl then
             local pageNum = ({A="1",B="2",C="3"})[g] or g
-            LichborneAllPageLbl:SetText("|cffaaccffPage "..pageNum.."  v|r")
+            LichborneAllPageLbl:SetText("|cffd4af37Page "..pageNum.."  v|r")
         end
         if LichborneAllPagePrev then LichborneAllPagePrev:SetAlpha(g ~= "A" and 1.0 or 0.35) end
         if LichborneAllPageNext then LichborneAllPageNext:SetAlpha(g ~= "C" and 1.0 or 0.35) end
@@ -2713,7 +2783,7 @@ local function BuildAllFrame(parent, fl)
         mb:SetBackdrop({bgFile="Interface\\ChatFrame\\ChatFrameBackground",edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=16,edgeSize=8,insets={left=1,right=1,top=1,bottom=1}})
         mb:SetBackdropColor(0.05,0.08,0.20,1); mb:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight","ADD")
         local mblbl=mb:CreateFontString(nil,"OVERLAY","GameFontNormal"); mblbl:SetAllPoints(mb); mblbl:SetJustifyH("CENTER")
-        mblbl:SetText("|cffaaccffPage "..gi.."|r")
+        mblbl:SetText("|cffd4af37Page "..gi.."|r")
         local cap=gname
         mb:SetScript("OnClick",function()
             LichborneTrackerDB.allGroup=cap; UpdateAllGroupDD(); allGroupMenu:Hide(); RefreshAllRows()
@@ -2732,7 +2802,7 @@ local function BuildAllFrame(parent, fl)
         hdr:SetPoint("TOPLEFT",LichborneAllFrame,"TOPLEFT",col*ALL_COL_W,-26)
         hdr:SetSize(ALL_COL_W,18); hdr:SetFrameLevel(fl+11)
         local hbg=hdr:CreateTexture(nil,"BACKGROUND"); hbg:SetAllPoints(hdr); hbg:SetTexture(0.08,0.20,0.42,1)
-        local function H(txt,x,w) local fs=hdr:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); fs:SetPoint("LEFT",hdr,"LEFT",x,0); fs:SetWidth(w); fs:SetJustifyH("CENTER"); fs:SetText(txt) end
+        local function H(txt,x,w) local fs=hdr:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); fs:SetPoint("LEFT",hdr,"LEFT",x,0); fs:SetWidth(w); fs:SetJustifyH("CENTER"); fs:SetText("|cffd4af37"..txt.."|r") end
         H("#",2,18); H("",20,18); H("",40,18); H("Name",62,148); H("GS",214,52); H("Tier",264,34)
     end
 
@@ -2745,6 +2815,10 @@ local function BuildAllFrame(parent, fl)
         rf:SetSize(ALL_COL_W, RH_ALL); rf:SetFrameLevel(fl+11)
         local rbg=rf:CreateTexture(nil,"BACKGROUND"); rbg:SetAllPoints(rf)
         rbg:SetTexture(rowInCol%2==0 and 0.06 or 0.04, rowInCol%2==0 and 0.08 or 0.06, rowInCol%2==0 and 0.16 or 0.12, 1)
+        local allHov=rf:CreateTexture(nil,"OVERLAY"); allHov:SetAllPoints(rf); allHov:SetTexture(0,0,0,0)
+        rf:EnableMouse(true)
+        rf:SetScript("OnEnter", function() allHov:SetTexture(0.78, 0.61, 0.23, 0.12) end)
+        rf:SetScript("OnLeave", function() allHov:SetTexture(0, 0, 0, 0) end)
 
         -- Row number
         local nl=rf:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); nl:SetPoint("LEFT",rf,"LEFT",2,0); nl:SetWidth(18); nl:SetJustifyH("CENTER"); nl:SetTextColor(0.4,0.5,0.6); rf.numLbl=nl
@@ -2775,6 +2849,8 @@ local function BuildAllFrame(parent, fl)
         gb:SetBackdropColor(0.05,0.07,0.14,0.6); gb:SetBackdropBorderColor(0.30,0.25,0.05,0.5)
         gb:SetScript("OnEnterPressed",function() gb:ClearFocus() end); gb:SetScript("OnTabPressed",function() gb:ClearFocus() end)
         rf.gsBox=gb
+        gb:SetScript("OnEnter", function() allHov:SetTexture(0.78, 0.61, 0.23, 0.12) end)
+        gb:SetScript("OnLeave", function() if GetMouseFocus()~=rf then allHov:SetTexture(0,0,0,0) end end)
 
         -- Tier box (styled like GS)
         local tierBox3=CreateFrame("Frame",nil,rf); tierBox3:SetPoint("LEFT",rf,"LEFT",264,0); tierBox3:SetSize(34,RH_ALL-2)
@@ -2810,6 +2886,11 @@ local function BuildAllFrame(parent, fl)
         ar:SetScript("OnLeave",function() GameTooltip:Hide() end)
         rf.addRaidBtn=ar
 
+        -- Hook child elements to propagate row highlight
+        HookRowHighlight(ag, rf, allHov)
+        HookRowHighlight(ar, rf, allHov)
+        if rf.specBtn then HookRowHighlight(rf.specBtn, rf, allHov) end
+
         -- No delete button on All tab (manage from class tabs)
 
         -- Divider
@@ -2836,7 +2917,7 @@ local function BuildAllFrame(parent, fl)
         local sbg=sw:CreateTexture(nil,"BACKGROUND"); sbg:SetAllPoints(sw); sbg:SetTexture(0.08,0.10,0.18,1); sw.bg=sbg
         local hex=string.format("|cff%02x%02x%02x",math.floor(c.r*255),math.floor(c.g*255),math.floor(c.b*255))
         local sl=sw:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); sl:SetAllPoints(sw); sl:SetJustifyH("CENTER"); sl:SetJustifyV("MIDDLE")
-        sl:SetText(hex..(TAB_LABELS[cls])..": 0|r"); sw.lbl=sl; LichborneAllCountLabels[cls]=sl
+        sl:SetText(hex..(TAB_LABELS[cls])..": "..hex.."0|r"); sw.lbl=sl; LichborneAllCountLabels[cls]=sl
     end
 end
 
@@ -2914,7 +2995,7 @@ local function OnFirstShow()
         local fs = hf:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         fs:SetPoint("LEFT", hf, "LEFT", x, 0)
         fs:SetWidth(w); fs:SetJustifyH("CENTER")
-        fs:SetText("|cff90b8e8"..lbl.."|r")
+        fs:SetText("|cffd4af37"..lbl.."|r")
     end
     local specHdr = hf:CreateTexture(nil, "OVERLAY")
     specHdr:SetPoint("LEFT", hf, "LEFT", SPEC_OFF + 1, 0)
@@ -2940,11 +3021,11 @@ local function OnFirstShow()
     pageDDBtn:SetPoint("RIGHT", hf, "RIGHT", -4, 0)
     pageDDBtn:SetSize(72, 16); pageDDBtn:SetFrameLevel(hf:GetFrameLevel()+2)
     pageDDBtn:SetBackdrop({bgFile="Interface\\ChatFrame\\ChatFrameBackground",edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=8,edgeSize=6,insets={left=1,right=1,top=1,bottom=1}})
-    pageDDBtn:SetBackdropColor(0.08,0.14,0.30,1); pageDDBtn:SetBackdropBorderColor(0.30,0.50,0.80,0.9)
+    pageDDBtn:SetBackdropColor(0.10, 0.08, 0.02, 1); pageDDBtn:SetBackdropBorderColor(0.78, 0.61, 0.23, 0.9)
     pageDDBtn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight","ADD")
     local pageDDLbl = pageDDBtn:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
     pageDDLbl:SetAllPoints(pageDDBtn); pageDDLbl:SetJustifyH("CENTER"); pageDDLbl:SetJustifyV("MIDDLE")
-    pageDDLbl:SetText("|cffaaccffPage 1  v|r")
+    pageDDLbl:SetText("|cffd4af37Page 1  v|r")
 
     -- Dropdown menu
     local pageDDMenu = CreateFrame("Frame","LichbornePageDDMenu",UIParent)
@@ -2958,7 +3039,7 @@ local function OnFirstShow()
         mb:SetBackdrop({bgFile="Interface\\ChatFrame\\ChatFrameBackground",edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=16,edgeSize=8,insets={left=1,right=1,top=1,bottom=1}})
         mb:SetBackdropColor(0.05,0.08,0.20,1); mb:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight","ADD")
         local mblbl = mb:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); mblbl:SetAllPoints(mb); mblbl:SetJustifyH("CENTER")
-        mblbl:SetText("|cffaaccffPage "..p.."|r")
+        mblbl:SetText("|cffd4af37Page "..p.."|r")
         local cap = p
         mb:SetScript("OnClick", function()
             classPage[activeTab] = cap
@@ -3046,7 +3127,7 @@ local function OnFirstShow()
         local hex = string.format("|cff%02x%02x%02x", math.floor(c.r*255), math.floor(c.g*255), math.floor(c.b*255))
         local lbl = sw:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         lbl:SetAllPoints(sw); lbl:SetJustifyH("CENTER"); lbl:SetJustifyV("MIDDLE")
-        lbl:SetText(hex..(TAB_LABELS[cls])..": --|r"); sw.lbl = lbl; sw.cls = cls
+        lbl:SetText(hex..(TAB_LABELS[cls])..": |cff555555--|r"); sw.lbl = lbl; sw.cls = cls
         sw:EnableMouse(true)
         sw:SetScript("OnEnter", function()
             GameTooltip:SetOwner(sw, "ANCHOR_TOP")
@@ -3514,7 +3595,7 @@ local function OnFirstShow()
         local hex = string.format("|cff%02x%02x%02x", math.floor(c.r*255), math.floor(c.g*255), math.floor(c.b*255))
         local lbl = csw:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         lbl:SetAllPoints(csw); lbl:SetJustifyH("CENTER"); lbl:SetJustifyV("MIDDLE")
-        lbl:SetText(hex..(TAB_LABELS[cls])..": 0|r"); csw.lbl = lbl; csw.cls = cls
+        lbl:SetText(hex..(TAB_LABELS[cls])..": "..hex.."0|r"); csw.lbl = lbl; csw.cls = cls
         LichborneCountLabels[cls] = lbl
         csw:EnableMouse(true)
         csw:SetScript("OnEnter", function()
@@ -3715,7 +3796,7 @@ local function OnFirstShow()
     infoText:SetText(
         "|cffd4af37LICHBORNE|r\n" ..
         "|cffd4af37Gear Tracker|r\n" ..
-        "|cffd4af37v1.50|r\n" ..
+        "|cffd4af37v1.51|r\n" ..
         "\n" ..
         "|cffaaaaaaQuestions & Support:|r\n" ..
         "|cffd4af37lichborne.wow|r\n" ..
@@ -3733,14 +3814,12 @@ UpdateSummary = function()
         local c = CLASS_COLORS[cls]
         if not c then break end
         local hex = string.format("|cff%02x%02x%02x", math.floor(c.r*255), math.floor(c.g*255), math.floor(c.b*255))
+        -- Always same dark background like count bar
+        sw.bg:SetTexture(0.08, 0.10, 0.18, 1)
         if avg > 0 then
-            local tc = TIER_COLORS[avg]
-            sw.bg:SetTexture(tc.r*0.4, tc.g*0.4, tc.b*0.4, 1)
-            local thex = string.format("%02x%02x%02x", math.floor(tc.r*255), math.floor(tc.g*255), math.floor(tc.b*255))
-            sw.lbl:SetText(hex..(TAB_LABELS[cls])..": |cff"..thex.."T"..avg.."|r")
+            sw.lbl:SetText(hex..(TAB_LABELS[cls])..": |cffd4af37T"..avg.."|r")
         else
-            sw.bg:SetTexture(0.08, 0.10, 0.18, 1)
-            sw.lbl:SetText(hex..(TAB_LABELS[cls])..": |cff444444--|r")
+            sw.lbl:SetText(hex..(TAB_LABELS[cls])..": |cff555555--|r")
         end
     end
     if not LichborneCountLabels then return end
@@ -3757,7 +3836,7 @@ UpdateSummary = function()
         if not c then break end
         local hex = string.format("|cff%02x%02x%02x", math.floor(c.r*255), math.floor(c.g*255), math.floor(c.b*255))
         local n = counts[cls]
-        lbl:SetText(hex..(TAB_LABELS[cls])..": "..n.."|r")
+        lbl:SetText(hex..(TAB_LABELS[cls])..": "..hex..n.."|r")
         local sw = _G["LichborneCountSwatch"..classIndex[cls]]
         if sw and sw.bg then
             if n > 0 then sw.bg:SetTexture(c.r*0.25, c.g*0.25, c.b*0.30, 1)
@@ -3791,8 +3870,8 @@ local function BuildFrameBG()
     divider:SetHeight(2)
     divider:SetTexture(0.78, 0.61, 0.23, 1)
     local title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    title:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -8)
-    title:SetText("|cffC69B3ALICHBORNE|r  —  Gear Tracker")
+    title:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -12)
+    title:SetText("|cffC69B3ALICHBORNE|r  —  Gear Tracker  |cffaaaaaa v1.51|r")
     local closeBtn = CreateFrame("Button", "LichborneCloseBtn", f, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", 2, 2)
     closeBtn:SetScript("OnClick", function() f:Hide() end)
@@ -3867,16 +3946,16 @@ local function BuildFrameBG()
         end
     )
 
-    -- Clear Raids button
+    -- Clear Raids button (now on LEFT)
     local clrRaidsBtn = CreateFrame("Button", nil, f)
     clrRaidsBtn:SetSize(100, 20)
-    clrRaidsBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -32, -5)
+    clrRaidsBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -136, -8)
     clrRaidsBtn:SetFrameLevel(f:GetFrameLevel()+10)
     clrRaidsBtn:SetBackdrop({bgFile="Interface\\ChatFrame\\ChatFrameBackground",edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=16,edgeSize=8,insets={left=2,right=2,top=2,bottom=2}})
-    clrRaidsBtn:SetBackdropColor(0.25,0.05,0.05,1); clrRaidsBtn:SetBackdropBorderColor(0.70,0.15,0.15,0.8)
+    clrRaidsBtn:SetBackdropColor(0.30,0.04,0.04,1); clrRaidsBtn:SetBackdropBorderColor(0.78,0.61,0.23,0.9)
     clrRaidsBtn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight","ADD")
     local clrRaidsLbl=clrRaidsBtn:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); clrRaidsLbl:SetAllPoints(clrRaidsBtn); clrRaidsLbl:SetJustifyH("CENTER")
-    clrRaidsLbl:SetText("|cffff8888Clear Raids|r")
+    clrRaidsLbl:SetText("|cffd4af37Clear Raids|r")
     clrRaidsBtn:SetScript("OnEnter",function()
         GameTooltip:SetOwner(clrRaidsBtn,"ANCHOR_BOTTOM")
         GameTooltip:AddLine("Clear All Raid Rosters",1,0.5,0.5)
@@ -3890,13 +3969,13 @@ local function BuildFrameBG()
     -- Clear All button
     local clrAllBtn = CreateFrame("Button", nil, f)
     clrAllBtn:SetSize(100, 20)
-    clrAllBtn:SetPoint("RIGHT", clrRaidsBtn, "LEFT", -4, 0)
+    clrAllBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -32, -8)
     clrAllBtn:SetFrameLevel(f:GetFrameLevel()+10)
     clrAllBtn:SetBackdrop({bgFile="Interface\\ChatFrame\\ChatFrameBackground",edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",tile=true,tileSize=16,edgeSize=8,insets={left=2,right=2,top=2,bottom=2}})
-    clrAllBtn:SetBackdropColor(0.35,0.04,0.04,1); clrAllBtn:SetBackdropBorderColor(0.90,0.10,0.10,0.9)
+    clrAllBtn:SetBackdropColor(0.30,0.04,0.04,1); clrAllBtn:SetBackdropBorderColor(0.78,0.61,0.23,0.9)
     clrAllBtn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight","ADD")
     local clrAllLbl=clrAllBtn:CreateFontString(nil,"OVERLAY","GameFontNormalSmall"); clrAllLbl:SetAllPoints(clrAllBtn); clrAllLbl:SetJustifyH("CENTER")
-    clrAllLbl:SetText("|cffff4444Clear All Data|r")
+    clrAllLbl:SetText("|cffd4af37Clear All Data|r")
     clrAllBtn:SetScript("OnEnter",function()
         GameTooltip:SetOwner(clrAllBtn,"ANCHOR_BOTTOM")
         GameTooltip:AddLine("Wipe Entire Database",1,0.3,0.3)
@@ -4208,14 +4287,17 @@ dragPollFrame:SetScript("OnUpdate", function()
             end
         end
 
-        -- Perform swap if we found a valid target
+        -- Perform insert if we found a valid target
         if targetRow then
             local a = dragSourceRow.dbIndex
             local b = targetRow.dbIndex
-            if a and b then
-                local tmp = LichborneTrackerDB.rows[a]
-                LichborneTrackerDB.rows[a] = LichborneTrackerDB.rows[b]
-                LichborneTrackerDB.rows[b] = tmp
+            if a and b and a ~= b then
+                local rows = LichborneTrackerDB.rows
+                local item = rows[a]
+                table.remove(rows, a)
+                local insertAt = b > a and b - 1 or b
+                table.insert(rows, insertAt, item)
+                classSortMode = nil  -- clear sort so drag order sticks
                 RefreshRows()
             end
         end
@@ -4224,7 +4306,12 @@ dragPollFrame:SetScript("OnUpdate", function()
         for _, rf in ipairs(rowFrames) do
             rf.hov:SetTexture(0, 0, 0, 0)
             rf.dropHi:SetTexture(0, 0, 0, 0)
-            if rf.dragTex then rf.dragTex:SetVertexColor(0.3, 0.4, 0.6, 0.8) end
+            if rf.dragLbl and rf.dbIndex then
+                local data = LichborneTrackerDB.rows[rf.dbIndex]
+                local cls = data and data.cls
+                local cc = cls and CLASS_COLORS[cls]
+                rf.dragLbl:SetTextColor(0.4, 0.4, 0.5, 1.0)
+            end
         end
         dragSourceRow = nil
         return
